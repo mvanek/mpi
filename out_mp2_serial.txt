@@ -1,0 +1,21 @@
+Running with n=2304 p=1
+Running simulation with tolerance=0.000000 and max iterations=100
+Results:
+Iterations=100
+Tolerance=0.0012070087
+Running time=  5.82729912
+Value at (R,C)=  0.18192301
+Running with n=4320 p=1
+Running simulation with tolerance=0.000000 and max iterations=100
+Results:
+Iterations=100
+Tolerance=0.0012070087
+Running time= 21.23894787
+Value at (R,C)=  0.18192301
+Running with n=10080 p=1
+Running simulation with tolerance=0.000000 and max iterations=100
+Results:
+Iterations=100
+Tolerance=0.0012070087
+Running time=117.73852015
+Value at (R,C)=  0.18192301
