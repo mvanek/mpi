@@ -121,16 +121,15 @@ main (int argc, char *argv[])
 	double tstart, tend, ttotal;
     int iteration;
 
-    /* Temporarily run small version statically */
-	n = 2304;
-    r = 2302;
-    c = 2300;
-    /*
-	n = 10080;
-    r = 10078;
-    c = 10076;
-    */
-    max_iterations = 100;
+	if (argc != ARGS) {
+		fprintf(stderr,"Wrong # of arguments.\nUsage: %s N I R C\n",
+					argv[0]);
+		return -1;
+	}
+	n = atoi(argv[1]);
+	max_iterations = atoi(argv[2]);
+	r = atoi(argv[3]);
+	c = atoi(argv[4]);
 
     /* Start MPI routine */
     MPI_Init(&argc, &argv);
