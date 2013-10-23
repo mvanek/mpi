@@ -101,7 +101,7 @@ mark (int rank)
     /*
     printf("[%d] %d\n", rank, i++);
     */
-    if (!rank)
+    if (rank == 3)
         printf("%d\n", i++);
 }
 
@@ -153,7 +153,9 @@ boundary_init (double **a, int hotlen, int coldlen, int n, int h, int w, int ran
 
     /* LEFT */
     for (i = hotlen; i < h+2; i++)
+    {
         a[i][0] = a[i][1];
+    }
 
     /* RIGHT */
     for (i = 0; i < h+2; i++)
@@ -184,7 +186,7 @@ pjacobi (int n, int r, int c, int max_iterations, int rank, int size)
     double maxdiff;
     int h = n/size,
         w = n,
-        hotlen = MIN(h, (n+2)/2 - h*rank),
+        hotlen = MAX(MIN(h, (n+2)/2 - h*rank), 0),
         coldlen = (n+2)/2;
 
     int i, j;                       /* Runtime data */
@@ -220,9 +222,7 @@ pjacobi (int n, int r, int c, int max_iterations, int rank, int size)
     {
         double maxdiff_loc;
         boundary_init(a, hotlen, coldlen, n, h, w, rank, size);
-        mark(rank);
         maxdiff_loc = compute_grid(a, b, h, w);
-        mark(rank);
 		swap_matrix(&a,&b);
         MPI_Allreduce(&maxdiff_loc, &maxdiff, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 	}
