@@ -107,8 +107,7 @@ int main(int argc, char* argv[]) {
 	// Copy a to b
 	for(i=0; i<n+2; i++) {
 		for(j=0; j<n+2; j++) {
-			b[i][j] = a[i][j];
-		}
+			b[i][j] = a[i][j]; }
 	}
 
 	// Output initial grid
@@ -121,8 +120,8 @@ int main(int argc, char* argv[]) {
 	printf("Running simulation with tolerance=%lf and max iterations=%d\n",
 		TOL, max_iterations);
 	tstart = get_clock();
-	while(maxdiff > TOL && iteration<max_iterations) {
-
+	while(TOL < maxdiff && iteration<max_iterations)
+    {
 		// Initialize boundary values
 		// Top
 		for(j=0; j<n+2; j++)

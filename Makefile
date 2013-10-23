@@ -1,7 +1,7 @@
 SHELL=/bin/bash
 
 CC=gcc
-CCFLAGS = -O0
+CCFLAGS = -O0 -g
 MPICC=mpicc
 
 CMD = pjacobi
