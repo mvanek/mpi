@@ -94,6 +94,17 @@ MPI_perror(int errno, char *s)
     fprintf(stderr, format, s, bytes, out);
 }
 
+void
+mark (int rank)
+{
+    static int i = 0;
+    /*
+    printf("[%d] %d\n", rank, i++);
+    */
+    if (rank == 2)
+        printf("%d\n", i++);
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -102,7 +113,8 @@ main (int argc, char *argv[])
 
     int rank, size;                 /* MPI variables */
 
-    double **a, **b, maxdiff;       /* The matrices */
+    double **a, **b;                /* The matrices */
+    double maxdiff, gmaxdiff;
     int bclength;
     int i, j, h, w;
 
@@ -139,46 +151,49 @@ main (int argc, char *argv[])
 		a[i][0] = BC_HOT;
 
 	/* Initialize the cold boundary */
-	for(j=MAX(0, bclength-rank*h);j<n+2;j++)
-		a[n+1][j] = BC_COLD;
+	for(j=MAX(0, bclength-rank*h);j<w+2;j++)
+		a[h+1][j] = BC_COLD;
 
 	/* Copy a to b */
-	for(i=0; i<n+2; i++)
-		for(j=0; j<n+2; j++)
+	for(i=0; i<h+2; i++)
+		for(j=0; j<w+2; j++)
 			b[i][j] = a[i][j];
 
 	iteration = 0;
-	maxdiff = 1.0;
+	gmaxdiff = maxdiff = 1.0;
 	printf("Running simulation with tolerance=%lf and max iterations=%d\n",
 		TOL, max_iterations);
 	tstart = get_clock();
-	while (TOL < maxdiff && iteration++ < max_iterations)
+	while (TOL < gmaxdiff && iteration++ < max_iterations)
     {
 		/* Initialize boundary values */
         /* TOP */
-        if (!rank)          /* The top block */
+        if (!rank) {        /* The top block */
             for (j = 0; j < w+2; j++)
                 a[0][j] = a[1][j];
-        else if ((status = MPI_Recv(a[0], w * sizeof(float), MPI_DOUBLE,
+        } else {
+            if ((status = MPI_Recv(&a[0][1], w, MPI_DOUBLE,
                             MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD,
                             MPI_STATUS_IGNORE)))
             {
                 MPI_perror(status, "MPI_Recv");
                 return -1;
             }
-        if (rank != size-1)
-            if ((status = MPI_Send(a[h], w * sizeof(float), MPI_DOUBLE, 0,
-                            rank+1, MPI_COMM_WORLD)))
+        }
+        if (rank != size-1) {
+            if ((status = MPI_Ssend(&a[h][1], w, MPI_DOUBLE, rank+1,
+                            0, MPI_COMM_WORLD)))
             {
                 MPI_perror(status, "MPI_Send");
                 return -1;
             }
+        }
 
         /* BOTTOM */
         if (rank == size-1)     /* The bottom block */
             for (j = 0; j < w+2-bclength; j++)
                 a[h+1][j] = a[h][j];
-        else if ((status = MPI_Recv(a[h+1], w * sizeof(float), MPI_DOUBLE,
+        else if ((status = MPI_Recv(&a[h+1][1], w, MPI_DOUBLE,
                             MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD,
                             MPI_STATUS_IGNORE)))
             {
@@ -186,8 +201,8 @@ main (int argc, char *argv[])
                 return -1;
             }
         if (rank)
-            if ((status = MPI_Send(a[1], w * sizeof(float), MPI_DOUBLE, 0,
-                            rank-1, MPI_COMM_WORLD)))
+            if ((status = MPI_Send(&a[1][1], w, MPI_DOUBLE, rank-1,
+                            0, MPI_COMM_WORLD)))
             {
                 MPI_perror(status, "MPI_Send");
                 return -1;
@@ -203,7 +218,7 @@ main (int argc, char *argv[])
 
 		/* Compute new grid values */
 		maxdiff = 0.0;
-		for (i = 1; i < n+1; i++)
+		for (i = 1; i < h+1; i++)
 			for (j = 1; j < w+1; j++) {
 				b[i][j] = 0.2*(a[i][j] + a[i-1][j] + a[i+1][j] +
 					       a[i][j-1] + a[i][j+1]);
@@ -213,22 +228,24 @@ main (int argc, char *argv[])
 
 		/* Copy b to a */
 		swap_matrix(&a,&b);
+        MPI_Allreduce(&maxdiff, &gmaxdiff, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 	}
 
     if (rank) {
-        if ((status = MPI_Send(a[h], w * sizeof(float), MPI_DOUBLE, 0,
-                        0, MPI_COMM_WORLD)))
-        {
-            MPI_perror(status, "MPI_Send");
-            return -1;
-        }
+        for (i = 1; i < h+1; i++)
+            if ((status = MPI_Send(&a[i][1], w, MPI_DOUBLE, 0,
+                            0, MPI_COMM_WORLD)))
+            {
+                MPI_perror(status, "MPI_Send");
+                return -1;
+            }
     } else {
         double **result = create_matrix(n, n);
-        matcpy(result, a, h, w);
+        matcpy(result, &a[1], h, w);
         for (i = 1; i < size; i++)
             for (j = 0; j < h; j++)
-                if ((status = MPI_Recv(result[i*h+j], w * sizeof(float), MPI_DOUBLE,
-                                MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD,
+                if ((status = MPI_Recv(result[i*h+j], w, MPI_DOUBLE,
+                                i, MPI_ANY_TAG, MPI_COMM_WORLD,
                                 MPI_STATUS_IGNORE)))
                 {
                     MPI_perror(status, "MPI_Recv");
@@ -241,13 +258,13 @@ main (int argc, char *argv[])
         /* Results */
         /*
         printf("Final (%dx%d) grid (%d/%d):\n", h, w, rank+1, size);
-        print_grid(a,h+2,w+2);
+        print_grid(result,n,n);
         */
         printf("Results:\n");
         printf("Iterations=%d\n",iteration-1);
         printf("Tolerance=%12.10lf\n",maxdiff);
         printf("Running time=%12.8lf\n",ttotal);
-        printf("Value at (%d,%d)=",r,c); printf("%12.8lf\n",result[r][c]);
+        printf("Value at (%d,%d)=%12.8lf\n",r,c,result[r-1][c-1]);
         free_matrix(result, n);
     }
 
