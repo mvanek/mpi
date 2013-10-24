@@ -119,36 +119,34 @@ MPI_perror(int errno, char *s)
 int
 boundary_init (double **a, int hotlen, int coldlen, int n, int h, int w, int rank, int size)
 {
+    MPI_Request req[4] = {MPI_REQUEST_NULL, MPI_REQUEST_NULL, MPI_REQUEST_NULL, MPI_REQUEST_NULL};
     int i, j;
     /* TOP */
-    if (!rank) {            /* The top block */
+    if (!rank)
         for (j = 0; j < w+2; j++)
             a[0][j] = a[1][j];
-    } else {
-        MPI_Recv(&a[0][1], w, MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG,
-                MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    }
-    if (rank != size-1)
-        MPI_Send(&a[h][1], w, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD);
-
     /* BOTTOM */
-    if (rank == size-1) {   /* The bottom block */
+    if (rank == size-1)
         for (j = 0; j < coldlen; j++)
             a[h+1][j] = a[h][j];
-    } else {
-        MPI_Recv(&a[h+1][1], w, MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG,
-                MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    }
-    if (rank)
-        MPI_Send(&a[1][1], w, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD);
-
     /* LEFT */
     for (i = hotlen; i < h+2; i++)
         a[i][0] = a[i][1];
-
     /* RIGHT */
     for (i = 0; i < h+2; i++)
         a[i][n+1] = a[i][n];
+
+    if (rank != size-1) {
+        MPI_Irecv(&a[h+1][1], w, MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG,
+                MPI_COMM_WORLD, &req[1]);
+        MPI_Isend(&a[h][1], w, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD, &req[2]);
+    }
+    if (rank) {
+        MPI_Irecv(&a[0][1], w, MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG,
+                MPI_COMM_WORLD, &req[0]);
+        MPI_Isend(&a[1][1], w, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD, &req[3]);
+    }
+    MPI_Waitall(4, req, MPI_STATUSES_IGNORE);
 
     return 0;
 }
@@ -174,7 +172,8 @@ pjacobi (int n, int r, int c, int max_iterations, int rank, int size)
     int i, j;                       /* Runtime data */
 	double tstart, tend, ttotal;
     int iteration = 0;
-    double **a, **b;                /* Matrix data */
+    double **a, **b,                /* Matrix data */
+        **result;
     double maxdiff = 1.0;
     int h = n/size,
         w = n,
@@ -185,13 +184,15 @@ pjacobi (int n, int r, int c, int max_iterations, int rank, int size)
 	a = create_matrix(h+2, w+2);
 	b = create_matrix(h+2, w+2);
 	init_matrix(a,h+2, w+2, hotlen, coldlen, rank, size);
-
     matcpy(b, a, h, w);
+    if (!rank)
+        result = create_matrix(n,n);
 
+    MPI_Barrier(MPI_COMM_WORLD);
     if (!rank) {
+        tstart = get_clock();
         printf("Running simulation with tolerance=%lf and max iterations=%d\n",
                 TOL, max_iterations);
-        tstart = get_clock();
     }
 
 	while (TOL < maxdiff && iteration++ < max_iterations)
@@ -202,11 +203,11 @@ pjacobi (int n, int r, int c, int max_iterations, int rank, int size)
 		swap_matrix(&a,&b);
         MPI_Allreduce(&maxdiff_loc, &maxdiff, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 	}
+
     if (rank) {
         for (i = 1; i < h+1; i++)
             MPI_Send(&a[i][1], w, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
     } else {
-        double **result = create_matrix(n, n);
         matcpy(result, &a[1], h, w);
         for (i = 1; i < size; i++)
             for (j = 0; j < h; j++)
