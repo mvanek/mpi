@@ -24,7 +24,8 @@ double get_clock() {
 }
 
 
-double **create_matrix(int h, int w) {
+double **
+create_matrix(int h, int w) {
 	int i;
 	double **a;
 
@@ -36,16 +37,34 @@ double **create_matrix(int h, int w) {
 	return a;
 }
 
-void init_matrix(double **a, int h, int w)
+void
+mark (int rank)
+{
+    static int i = 0;
+    /*
+    printf("[%d] %d\n", rank, i++);
+    */
+    if (rank == 0)
+        printf("%d\n", i++);
+}
+
+void
+init_matrix(double **a, int h, int w, int hotlen, int coldlen, int rank, int size)
 {
 	int i, j;
 	for(i=0; i<h; i++) {
 		for(j=0; j<w; j++)
 			a[i][j] = INITIAL_GRID;
 	}
+	for(i=0;i<hotlen;i++)           /* Hot boundary */
+		a[i][0] = BC_HOT;
+    if (rank == size-1)
+        for(j=coldlen;j<w;j++)    /* Cold boundary */
+            a[h-1][j] = BC_COLD;
 }
 
-void free_matrix(double **a, int h)
+void
+free_matrix (double **a, int h)
 {
 	int i;
 	for (i=0;i<h;i++) {
@@ -54,21 +73,24 @@ void free_matrix(double **a, int h)
 	free(a);
 }
 
-void matcpy (double **d, double **s, int h, int w)
+void
+matcpy (double **d, double **s, int h, int w)
 {
     int i;
     for (i = 0; i < h; i++)
         memcpy(d[i], s[i], w * sizeof (double));
 }
 
-void swap_matrix(double ***a, double ***b)
+void
+swap_matrix(double ***a, double ***b)
 {
 	double **temp = *a;
 	*a = *b;
 	*b = temp;
 }
 
-void print_grid(double **a, int h, int w)
+void
+print_grid(double **a, int h, int w)
 {
 	int i, j;
 	for(i=1; i<h-1; i++) {
@@ -94,68 +116,36 @@ MPI_perror(int errno, char *s)
     fprintf(stderr, format, s, bytes, out);
 }
 
-void
-mark (int rank)
-{
-    static int i = 0;
-    /*
-    printf("[%d] %d\n", rank, i++);
-    */
-    if (rank == 3)
-        printf("%d\n", i++);
-}
-
 int
 boundary_init (double **a, int hotlen, int coldlen, int n, int h, int w, int rank, int size)
 {
     int i, j;
     int status;
     /* TOP */
-    if (!rank) {        /* The top block */
+    if (!rank) {            /* The top block */
         for (j = 0; j < w+2; j++)
             a[0][j] = a[1][j];
     } else {
-        if ((status = MPI_Recv(&a[0][1], w, MPI_DOUBLE,
-                        MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD,
-                        MPI_STATUS_IGNORE)))
-        {
-            MPI_perror(status, "MPI_Recv");
-            return -1;
-        }
+        MPI_Recv(&a[0][1], w, MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG,
+                MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     }
-    if (rank != size-1) {
-        if ((status = MPI_Ssend(&a[h][1], w, MPI_DOUBLE, rank+1,
-                        0, MPI_COMM_WORLD)))
-        {
-            MPI_perror(status, "MPI_Send");
-            return -1;
-        }
-    }
+    if (rank != size-1)
+        MPI_Send(&a[h][1], w, MPI_DOUBLE, rank+1, 0, MPI_COMM_WORLD);
 
     /* BOTTOM */
-    if (rank == size-1)     /* The bottom block */
+    if (rank == size-1) {   /* The bottom block */
         for (j = 0; j < coldlen; j++)
             a[h+1][j] = a[h][j];
-    else if ((status = MPI_Recv(&a[h+1][1], w, MPI_DOUBLE,
-                        MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD,
-                        MPI_STATUS_IGNORE)))
-        {
-            MPI_perror(status, "MPI_Recv");
-            return -1;
-        }
+    } else {
+        MPI_Recv(&a[h+1][1], w, MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG,
+                MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    }
     if (rank)
-        if ((status = MPI_Send(&a[1][1], w, MPI_DOUBLE, rank-1,
-                        0, MPI_COMM_WORLD)))
-        {
-            MPI_perror(status, "MPI_Send");
-            return -1;
-        }
+        MPI_Send(&a[1][1], w, MPI_DOUBLE, rank-1, 0, MPI_COMM_WORLD);
 
     /* LEFT */
     for (i = hotlen; i < h+2; i++)
-    {
         a[i][0] = a[i][1];
-    }
 
     /* RIGHT */
     for (i = 0; i < h+2; i++)
@@ -182,42 +172,30 @@ compute_grid (double **a, double **b, int h, int w)
 int
 pjacobi (int n, int r, int c, int max_iterations, int rank, int size)
 {
+    int i, j;                       /* Runtime data */
+    int bytes, status;
+	double tstart, tend, ttotal;
+    int iteration = 0;
     double **a, **b;                /* Matrix data */
-    double maxdiff;
+    double maxdiff = 1.0;
     int h = n/size,
         w = n,
         hotlen = MAX(MIN(h, (n+2)/2 - h*rank), 0),
         coldlen = (n+2)/2;
 
-    int i, j;                       /* Runtime data */
-    int bytes, status;
-	double tstart, tend, ttotal;
-    int iteration;
-
-    /* Assign rows */
-    h = n / size;
-    w = n;
-
+    /* INIT */
 	a = create_matrix(h+2, w+2);
 	b = create_matrix(h+2, w+2);
-	init_matrix(a,h+2, w+2);
-
-	/* Initialize the hot boundary */
-	for(i=0;i<hotlen;i++)
-		a[i][0] = BC_HOT;
-
-	/* Initialize the cold boundary */
-    if (rank == size-1)
-        for(j=coldlen;j<w+2;j++)
-            a[h+1][j] = BC_COLD;
+	init_matrix(a,h+2, w+2, hotlen, coldlen, rank, size);
 
     matcpy(b, a, h, w);
 
-	iteration = 0;
-	maxdiff = maxdiff = 1.0;
-	printf("Running simulation with tolerance=%lf and max iterations=%d\n",
-		TOL, max_iterations);
-	tstart = get_clock();
+    if (!rank) {
+        printf("Running simulation with tolerance=%lf and max iterations=%d\n",
+                TOL, max_iterations);
+        tstart = get_clock();
+    }
+
 	while (TOL < maxdiff && iteration++ < max_iterations)
     {
         double maxdiff_loc;
@@ -226,36 +204,21 @@ pjacobi (int n, int r, int c, int max_iterations, int rank, int size)
 		swap_matrix(&a,&b);
         MPI_Allreduce(&maxdiff_loc, &maxdiff, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 	}
-
     if (rank) {
         for (i = 1; i < h+1; i++)
-            if ((status = MPI_Send(&a[i][1], w, MPI_DOUBLE, 0,
-                            0, MPI_COMM_WORLD)))
-            {
-                MPI_perror(status, "MPI_Send");
-                return -1;
-            }
+            MPI_Send(&a[i][1], w, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
     } else {
         double **result = create_matrix(n, n);
         matcpy(result, &a[1], h, w);
         for (i = 1; i < size; i++)
             for (j = 0; j < h; j++)
-                if ((status = MPI_Recv(result[i*h+j], w, MPI_DOUBLE,
-                                i, MPI_ANY_TAG, MPI_COMM_WORLD,
-                                MPI_STATUS_IGNORE)))
-                {
-                    MPI_perror(status, "MPI_Recv");
-                    return -1;
-                }
+                MPI_Recv(result[i*h+j], w, MPI_DOUBLE, i, MPI_ANY_TAG,
+                        MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
         tend = get_clock();
         ttotal = tend-tstart;
 
         /* Results */
-        /*
-        printf("Final (%dx%d) grid (%d/%d):\n", h, w, rank+1, size);
-        print_grid(result,n,n);
-        */
         printf("Results:\n");
         printf("Iterations=%d\n",iteration-1);
         printf("Tolerance=%12.10lf\n",maxdiff);
