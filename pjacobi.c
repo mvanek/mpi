@@ -120,7 +120,6 @@ int
 boundary_init (double **a, int hotlen, int coldlen, int n, int h, int w, int rank, int size)
 {
     int i, j;
-    int status;
     /* TOP */
     if (!rank) {            /* The top block */
         for (j = 0; j < w+2; j++)
@@ -173,7 +172,6 @@ int
 pjacobi (int n, int r, int c, int max_iterations, int rank, int size)
 {
     int i, j;                       /* Runtime data */
-    int bytes, status;
 	double tstart, tend, ttotal;
     int iteration = 0;
     double **a, **b;                /* Matrix data */
