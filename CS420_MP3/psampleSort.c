@@ -186,24 +186,6 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	#if DEBUG
-	{
-		for (i=0;i<nbuckets;i++) {
-			MPI_Barrier(MPI_COMM_WORLD);
-			if (i != rank) continue;
-			printf("RANK %d's BUCKETS\n", rank);
-			for (j=0;j<nbuckets;j++) {
-				printf("[%d] ", j);
-				for (int k=0;k<bucket_sizes[j];k++) {
-					printf("%llu, ", buckets[j][k]);
-				}
-				printf("\n");
-			}
-			printf("\n");
-		}
-	}
-	#endif
-
 
 	/*
 	 * GLOBAL BUCKET DISTRIBUTE
@@ -231,21 +213,6 @@ int main(int argc, char *argv[]) {
 	}
 	#endif
 
-	#if DEBUG
-	{
-		for (i=0;i<nbuckets;i++) {
-			MPI_Barrier(MPI_COMM_WORLD);
-			if (i != rank) continue;
-			printf("RANK %d's INCOMING BUCKET SIZES (total = %d): ", rank, bucket_size);
-			for (j=0;j<nbuckets;j++) {
-				printf("%d (%d), ", incoming_bucket_sizes[j], bucket_disp[j]);
-			}
-			printf("\n");
-			if (rank == 3) printf("\n");
-		}
-	}
-	#endif
-
 	/* Send the buckets to the appropriate process */
 	for (i=0;i<nbuckets;i++) {
 		MPI_Gatherv(buckets[i], bucket_sizes[i], MPI_UNSIGNED_LONG_LONG,
@@ -259,21 +226,6 @@ int main(int argc, char *argv[]) {
 		if (!rank) {
 			printf("[ ] Bucket Distribute Time: %lf\n", ((t3 = get_clock()) - t2));
 			t2 = t3;
-		}
-	}
-	#endif
-
-	#if DEBUG
-	{
-		for (i=0;i<nbuckets;i++) {
-			MPI_Barrier(MPI_COMM_WORLD);
-			if (i != rank) continue;
-			printf("RANK %d's INCOMING BUCKETS (total = %d)\n", rank, bucket_size);
-			for (j=0;j<bucket_size;j++) {
-				printf("%llu, ", bucket[j]);
-			}
-			printf("\n");
-			if (rank == 3) printf("\n");
 		}
 	}
 	#endif
