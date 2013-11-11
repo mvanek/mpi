@@ -15,7 +15,8 @@ do
 	for cores in 2 6 12
 	do
 
-		echo "Running with n=${gsize} p=${cores}" >> out_mp3.txt
+		echo "
+        Running with n=${gsize} p=${cores}" >> out_mp3.txt
 
 		# Run MP3
 		mpirun -n $cores ./psampleSort $gsize >> out_mp3.txt

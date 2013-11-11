@@ -90,6 +90,12 @@ int main(int argc, char *argv[]) {
 	MPI_Bcast(elmnts, size, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD);
 	local_elmnts = elmnts + rank*bsize;
 
+	MPI_Barrier(MPI_COMM_WORLD);
+	if (!rank) {
+		printf("[+] Data Distribution Time: %lf\n", ((t3 = get_clock()) - t1));
+		t2 = t3;
+	}
+
 
 	/*
 	 * LOCAL SAMPLE SELECT
@@ -98,6 +104,14 @@ int main(int argc, char *argv[]) {
 	for(j = 0; j < nbuckets - 1; j++) {
 		local_sample[j] = local_elmnts[bsize/nbuckets*(j+1)];
 	}
+
+	MPI_Barrier(MPI_COMM_WORLD);
+	if (!rank) {
+		printf("[-] Local Sample Select Time: %lf\n", ((t3 = get_clock()) - t1));
+		t2 = t3;
+	}
+
+
 	/*
 	 * GLOBAL SAMPLE SELECT GATHER
 	 */
@@ -107,8 +121,7 @@ int main(int argc, char *argv[]) {
 
 	MPI_Barrier(MPI_COMM_WORLD);
 	if (!rank) {
-		t3 = get_clock();
-		printf("Sample Select Time: %lf\n",(t3-t1));
+		printf("[+] Sample Select Gather Time: %lf\n", ((t3 = get_clock()) - t2));
 		t2 = t3;
 	}
 
@@ -124,8 +137,7 @@ int main(int argc, char *argv[]) {
 
 	MPI_Barrier(MPI_COMM_WORLD);
 	if (!rank) {
-		t3 = get_clock();
-		printf("Splitter Select Time: %lf\n",(t3-t2));
+		printf("[-] Splitter Select Time: %lf\n", ((t3 = get_clock()) - t2));
 		t2 = t3;
 	}
 
@@ -146,8 +158,7 @@ int main(int argc, char *argv[]) {
 
 	MPI_Barrier(MPI_COMM_WORLD);
 	if (!rank) {
-		t3 = get_clock();
-		printf("Bucket Distribute Time: %lf\n",(t3-t2));
+		printf("[ ] Bucket Distribute Time: %lf\n", ((t3 = get_clock()) - t2));
 		t2 = t3;
 	}
 
@@ -159,9 +170,8 @@ int main(int argc, char *argv[]) {
 
 	MPI_Barrier(MPI_COMM_WORLD);
 	if (!rank) {
-		t3 = get_clock();
-		printf("Bucket Sort Time: %lf\n",(t3-t2));
-		printf("Total Time: %lf\n",(t3-t1));
+		printf("[-] Bucket Sort Time: %lf\n", ((t3 = get_clock()) - t2));
+		printf("[-] Total Time: %lf\n",(t3-t1));
 	}
 
 
