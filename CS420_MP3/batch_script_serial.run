@@ -5,7 +5,7 @@
 #PBS -j oe
 
 # Move to your mp0 directory
-cd /home/"netid"/MP3
+cd /home/vanek1/mpi/CS420_MP3/
 
 module load mpi
 

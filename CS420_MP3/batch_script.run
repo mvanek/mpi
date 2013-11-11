@@ -5,9 +5,9 @@
 #PBS -j oe
 
 # Move to your mp3 directory
-cd /home/"netid"/MP3
+cd /home/vanek1/mpi/CS420_MP3/
 
-module load mpi
+module load openmpi
 
 for gsize in 1200000 12000000 120000000
 do

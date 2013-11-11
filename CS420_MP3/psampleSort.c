@@ -89,7 +89,7 @@ int main(int argc, char *argv[]) {
 	/*
 	 * DISTRIBUTE DATA
 	 */
-	MPI_Bcast(elmnts, size, MPI_UINT64_T, 0, MPI_COMM_WORLD);
+	MPI_Bcast(elmnts, size, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD);
 	local_elmnts = elmnts + rank*bsize;
 
 
@@ -116,8 +116,8 @@ int main(int argc, char *argv[]) {
 	/*
 	 * GLOBAL SAMPLE SELECT GATHER
 	 */
-	MPI_Allgather(local_sample, nbuckets-1, MPI_UINT64_T,
-			sample, nbuckets-1, MPI_UINT64_T,
+	MPI_Allgather(local_sample, nbuckets-1, MPI_UNSIGNED_LONG_LONG,
+			sample, nbuckets-1, MPI_UNSIGNED_LONG_LONG,
 			MPI_COMM_WORLD);
 
 	/*
@@ -234,8 +234,8 @@ int main(int argc, char *argv[]) {
 		for(j = 0; j < bucket_size; j++) {
 			local_check ^= bucket[j];
 		}
-		MPI_Gather(&local_check, 1, MPI_UINT64_T,
-				gather_check, 1, MPI_UINT64_T,
+		MPI_Gather(&local_check, 1, MPI_UNSIGNED_LONG_LONG,
+				gather_check, 1, MPI_UNSIGNED_LONG_LONG,
 				0, MPI_COMM_WORLD);
 		MPI_Reduce(&bucket_size, &count, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 		if (!rank) {
@@ -247,8 +247,8 @@ int main(int argc, char *argv[]) {
 
 		local_min_max[0] = bucket[0];
 		local_min_max[1] = bucket[bucket_size-1];
-		MPI_Gather(local_min_max, 2, MPI_UINT64_T,
-				min_max, 2*nbuckets, MPI_UINT64_T,
+		MPI_Gather(local_min_max, 2, MPI_UNSIGNED_LONG_LONG,
+				min_max, 2*nbuckets, MPI_UNSIGNED_LONG_LONG,
 				0, MPI_COMM_WORLD);
 		if (!rank) {
 			checkMax = true;
