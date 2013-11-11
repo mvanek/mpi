@@ -9,6 +9,8 @@
 #define SEED 100
 #define OUTPUT 0
 #define CHECK 1
+#define DEBUG 0
+#define PROFILE 1
 #define bool2str(b) ((b)?"true":"false")
 
 typedef unsigned long long uint64_t;
@@ -97,17 +99,21 @@ int main(int argc, char *argv[]) {
 
 
 	/*
-	 * DISTRIBUTE DATA
+	 * MASTER: DISTRIBUTE DATA
 	 */
-	MPI_Scatter(elmnts, size, MPI_UNSIGNED_LONG_LONG,
+	MPI_Scatter(elmnts, bsize, MPI_UNSIGNED_LONG_LONG,
 			local_elmnts, bsize, MPI_UNSIGNED_LONG_LONG,
 			0, MPI_COMM_WORLD);
 
-	MPI_Barrier(MPI_COMM_WORLD);
-	if (!rank) {
-		printf("[+] Data Distribution Time: %lf\n", ((t3 = get_clock()) - t1));
-		t2 = t3;
+	#if PROFILE
+	{
+		MPI_Barrier(MPI_COMM_WORLD);
+		if (!rank) {
+			printf("[+] Data Distribution Time: %lf\n", ((t3 = get_clock()) - t1));
+			t2 = t3;
+		}
 	}
+	#endif
 
 
 	/*
@@ -118,11 +124,15 @@ int main(int argc, char *argv[]) {
 		local_sample[j] = local_elmnts[bsize/nbuckets*(j+1)];
 	}
 
-	MPI_Barrier(MPI_COMM_WORLD);
-	if (!rank) {
-		printf("[-] Local Sample Select Time: %lf\n", ((t3 = get_clock()) - t1));
-		t2 = t3;
+	#if PROFILE
+	{
+		MPI_Barrier(MPI_COMM_WORLD);
+		if (!rank) {
+			printf("[-] Local Sample Select Time: %lf\n", ((t3 = get_clock()) - t2));
+			t2 = t3;
+		}
 	}
+	#endif
 
 
 	/*
@@ -132,11 +142,15 @@ int main(int argc, char *argv[]) {
 			sample, nbuckets-1, MPI_UNSIGNED_LONG_LONG,
 			MPI_COMM_WORLD);
 
-	MPI_Barrier(MPI_COMM_WORLD);
-	if (!rank) {
-		printf("[+] Sample Select Gather Time: %lf\n", ((t3 = get_clock()) - t2));
-		t2 = t3;
+	#if PROFILE
+	{
+		MPI_Barrier(MPI_COMM_WORLD);
+		if (!rank) {
+			printf("[+] Sample Select Gather Time: %lf\n", ((t3 = get_clock()) - t2));
+			t2 = t3;
+		}
 	}
+	#endif
 
 
 	/*
@@ -148,18 +162,21 @@ int main(int argc, char *argv[]) {
 	}
 	splitters[nbuckets-1] = ULLONG_MAX;
 
-	MPI_Barrier(MPI_COMM_WORLD);
-	if (!rank) {
-		printf("[-] Splitter Select Time: %lf\n", ((t3 = get_clock()) - t2));
-		t2 = t3;
+	#if PROFILE
+	{
+		MPI_Barrier(MPI_COMM_WORLD);
+		if (!rank) {
+			printf("[-] Splitter Select Time: %lf\n", ((t3 = get_clock()) - t2));
+			t2 = t3;
+		}
 	}
+	#endif
 
 
 	/*
 	 * LOCAL BUCKET DISTRIBUTE
 	 */
-	/* Sort elements into the buckets */
-	for (i=0;i<size;i++) {
+	for (i=0;i<bsize;i++) {
 		for (j=0;j<nbuckets;j++) {
 			if (local_elmnts[i]<splitters[j]) {
 				buckets[j][bucket_sizes[j]] = local_elmnts[i];
@@ -168,6 +185,29 @@ int main(int argc, char *argv[]) {
 			}
 		}
 	}
+
+	#if DEBUG
+	{
+		for (i=0;i<nbuckets;i++) {
+			MPI_Barrier(MPI_COMM_WORLD);
+			if (i != rank) continue;
+			printf("RANK %d's BUCKETS\n", rank);
+			for (j=0;j<nbuckets;j++) {
+				printf("[%d] ", j);
+				for (int k=0;k<bucket_sizes[j];k++) {
+					printf("%llu, ", buckets[j][k]);
+				}
+				printf("\n");
+			}
+			printf("\n");
+		}
+	}
+	#endif
+
+
+	/*
+	 * GLOBAL BUCKET DISTRIBUTE
+	 */
 	/* Tell each process how many elements we will be sending */
 	int bucket_disp[nbuckets];
 	for (i=0;i<nbuckets;i++) {
@@ -180,18 +220,63 @@ int main(int argc, char *argv[]) {
 		bucket_disp[i] = bucket_disp[i-1] + incoming_bucket_sizes[i-1];
 	}
 	bucket_size = bucket_disp[nbuckets-1] + incoming_bucket_sizes[nbuckets-1];
+
+	#if PROFILE
+	{
+		MPI_Barrier(MPI_COMM_WORLD);
+		if (!rank) {
+			printf("[ ] Bucket Distribution Coordination Time: %lf\n", ((t3 = get_clock()) - t2));
+			t2 = t3;
+		}
+	}
+	#endif
+
+	#if DEBUG
+	{
+		for (i=0;i<nbuckets;i++) {
+			MPI_Barrier(MPI_COMM_WORLD);
+			if (i != rank) continue;
+			printf("RANK %d's INCOMING BUCKET SIZES (total = %d): ", rank, bucket_size);
+			for (j=0;j<nbuckets;j++) {
+				printf("%d (%d), ", incoming_bucket_sizes[j], bucket_disp[j]);
+			}
+			printf("\n");
+			if (rank == 3) printf("\n");
+		}
+	}
+	#endif
+
 	/* Send the buckets to the appropriate process */
 	for (i=0;i<nbuckets;i++) {
-		MPI_Gatherv(buckets[j], bucket_sizes[i], MPI_UNSIGNED_LONG_LONG,
+		MPI_Gatherv(buckets[i], bucket_sizes[i], MPI_UNSIGNED_LONG_LONG,
 				bucket, incoming_bucket_sizes, bucket_disp, MPI_UNSIGNED_LONG_LONG,
 				i, MPI_COMM_WORLD);
 	}
 
-	MPI_Barrier(MPI_COMM_WORLD);
-	if (!rank) {
-		printf("[ ] Bucket Distribute Time: %lf\n", ((t3 = get_clock()) - t2));
-		t2 = t3;
+	#if PROFILE
+	{
+		MPI_Barrier(MPI_COMM_WORLD);
+		if (!rank) {
+			printf("[ ] Bucket Distribute Time: %lf\n", ((t3 = get_clock()) - t2));
+			t2 = t3;
+		}
 	}
+	#endif
+
+	#if DEBUG
+	{
+		for (i=0;i<nbuckets;i++) {
+			MPI_Barrier(MPI_COMM_WORLD);
+			if (i != rank) continue;
+			printf("RANK %d's INCOMING BUCKETS (total = %d)\n", rank, bucket_size);
+			for (j=0;j<bucket_size;j++) {
+				printf("%llu, ", bucket[j]);
+			}
+			printf("\n");
+			if (rank == 3) printf("\n");
+		}
+	}
+	#endif
 
 
 	/*
@@ -201,8 +286,11 @@ int main(int argc, char *argv[]) {
 
 	MPI_Barrier(MPI_COMM_WORLD);
 	if (!rank) {
-		printf("[-] Bucket Sort Time: %lf\n", ((t3 = get_clock()) - t2));
-		printf("[-] Total Time: %lf\n",(t3-t1));
+		t3 = get_clock();
+		#if PROFILE
+		printf("[-] Bucket Sort Time: %lf\n", (t3 - t2));
+		#endif
+		printf("Total Time: %lf\n",(t3-t1));
 	}
 
 
