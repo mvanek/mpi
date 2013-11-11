@@ -31,12 +31,13 @@ int compare(const void *num1, const void *num2) {
 int main(int argc, char *argv[]) {
 	int i, j,
 	    size, bsize, nbuckets,
+	    *bucket_sizes, *incoming_bucket_sizes, bucket_size,
 	    count,
-	    bucket_size = 0,
 	    rank;
 	double t1, t2, t3;
 	uint64_t *splitters, *elmnts, *sample,
-		 *local_elmnts, *local_sample, *bucket,
+		 *local_elmnts, *local_sample,
+		 **buckets, *bucket,
 		 check;
 	bool checkMax;
 
@@ -56,13 +57,24 @@ int main(int argc, char *argv[]) {
 
 	size = atoi(argv[1]);
 	bsize = size/nbuckets;
-	splitters	= (uint64_t *) malloc (sizeof (uint64_t) * nbuckets);
-	elmnts		= (uint64_t *) malloc (sizeof (uint64_t) * size);
-	sample		= (uint64_t *) malloc (sizeof (uint64_t) * (nbuckets-1)*nbuckets);
-	local_sample= (uint64_t *) malloc (sizeof (uint64_t) * (nbuckets-1));
+	splitters	= (uint64_t *)  malloc(sizeof (uint64_t)   * nbuckets);
+	elmnts		= (uint64_t *)  malloc(sizeof (uint64_t)   * size);
+	local_elmnts	= (uint64_t *)  malloc(sizeof (uint64_t)   * bsize);
+	sample		= (uint64_t *)  malloc(sizeof (uint64_t)   * (nbuckets-1)*nbuckets);
+	local_sample	= (uint64_t *)  malloc(sizeof (uint64_t)   * (nbuckets-1));
+	buckets		= (uint64_t **) malloc(sizeof (uint64_t *) * nbuckets);
 	//the size of each bucket is guaranteed to be less than
 	//2*size/nbuckets becuase of the way we choose the sample
-	bucket		= (uint64_t *) malloc (sizeof (uint64_t) * 2*bsize);
+	bucket		= (uint64_t *)  malloc(sizeof (uint64_t *) * 2*bsize);
+	for(i=0;i<nbuckets;i++) {
+		buckets[i] = (uint64_t *) malloc(sizeof (uint64_t)*2*bsize);
+	}
+	bucket_sizes		= (int *) malloc(sizeof (int) * nbuckets);
+	incoming_bucket_sizes	= (int *) malloc(sizeof (int) * nbuckets);
+	for(i=0;i<nbuckets;i++) {
+		bucket_sizes[i] = 0;
+		incoming_bucket_sizes[i] = 0;
+	}
 
 	/*
 	 * MASTER: GENERATE DATA
@@ -87,8 +99,9 @@ int main(int argc, char *argv[]) {
 	/*
 	 * DISTRIBUTE DATA
 	 */
-	MPI_Bcast(elmnts, size, MPI_UNSIGNED_LONG_LONG, 0, MPI_COMM_WORLD);
-	local_elmnts = elmnts + rank*bsize;
+	MPI_Scatter(elmnts, size, MPI_UNSIGNED_LONG_LONG,
+			local_elmnts, bsize, MPI_UNSIGNED_LONG_LONG,
+			0, MPI_COMM_WORLD);
 
 	MPI_Barrier(MPI_COMM_WORLD);
 	if (!rank) {
@@ -145,15 +158,33 @@ int main(int argc, char *argv[]) {
 	/*
 	 * LOCAL BUCKET DISTRIBUTE
 	 */
-	for(i = 0; i < size; i++) {
-		for (j = 0; j <= rank; j++) {
-			if(elmnts[i] < splitters[j]) {
-				if (j == rank) {
-					bucket[bucket_size++] = elmnts[i];
-				}
+	/* Sort elements into the buckets */
+	for (i=0;i<size;i++) {
+		for (j=0;j<nbuckets;j++) {
+			if (local_elmnts[i]<splitters[j]) {
+				buckets[j][bucket_sizes[j]] = local_elmnts[i];
+				bucket_sizes[j]++;
 				break;
 			}
 		}
+	}
+	/* Tell each process how many elements we will be sending */
+	int bucket_disp[nbuckets];
+	for (i=0;i<nbuckets;i++) {
+		MPI_Gather(&bucket_sizes[i], 1, MPI_INT,
+				incoming_bucket_sizes, 1, MPI_INT,
+				i, MPI_COMM_WORLD);
+	}
+	bucket_disp[0] = 0;
+	for (i=1;i<nbuckets;i++) {
+		bucket_disp[i] = bucket_disp[i-1] + incoming_bucket_sizes[i-1];
+	}
+	bucket_size = bucket_disp[nbuckets-1] + incoming_bucket_sizes[nbuckets-1];
+	/* Send the buckets to the appropriate process */
+	for (i=0;i<nbuckets;i++) {
+		MPI_Gatherv(buckets[j], bucket_sizes[i], MPI_UNSIGNED_LONG_LONG,
+				bucket, incoming_bucket_sizes, bucket_disp, MPI_UNSIGNED_LONG_LONG,
+				i, MPI_COMM_WORLD);
 	}
 
 	MPI_Barrier(MPI_COMM_WORLD);
@@ -226,6 +257,7 @@ int main(int argc, char *argv[]) {
 	free(splitters);
 	free(elmnts);
 	free(sample);
+	free(local_elmnts);
 	free(local_sample);
 	free(bucket);
 
