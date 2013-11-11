@@ -9,7 +9,7 @@
 #define SEED 100
 #define OUTPUT 0
 #define CHECK 1
-#define bool2str(b) (b)?"true":"false"
+#define bool2str(b) ((b)?"true":"false")
 
 typedef unsigned long long uint64_t;
 
@@ -59,8 +59,7 @@ int main(int argc, char *argv[]) {
 	splitters	= (uint64_t *) malloc (sizeof (uint64_t) * nbuckets);
 	elmnts		= (uint64_t *) malloc (sizeof (uint64_t) * size);
 	sample		= (uint64_t *) malloc (sizeof (uint64_t) * (nbuckets-1)*nbuckets);
-//	local_elmnts	= (uint64_t *) malloc (sizeof (uint64_t) * bsize);
-	local_sample	= (uint64_t *) malloc (sizeof (uint64_t) * (nbuckets-1));
+	local_sample= (uint64_t *) malloc (sizeof (uint64_t) * (nbuckets-1));
 	//the size of each bucket is guaranteed to be less than
 	//2*size/nbuckets becuase of the way we choose the sample
 	bucket		= (uint64_t *) malloc (sizeof (uint64_t) * 2*bsize);
@@ -81,7 +80,6 @@ int main(int argc, char *argv[]) {
 		#endif
 	}
 
-
 	MPI_Barrier(MPI_COMM_WORLD);
 	t1 = get_clock();
 
@@ -100,40 +98,12 @@ int main(int argc, char *argv[]) {
 	for(j = 0; j < nbuckets - 1; j++) {
 		local_sample[j] = local_elmnts[bsize/nbuckets*(j+1)];
 	}
-		/*
-	for (j = 0; j < nbuckets; j++) {
-		MPI_Barrier(MPI_COMM_WORLD);
-		if (j != rank) continue;
-		printf("[%d] My block starts at index %d, and I choose these sample members: ", rank, local_elmnts - elmnts);
-		for (i = 0; i < nbuckets - 1; i++)
-			printf("%d, ", local_sample[i]);
-		printf("\n");
-		for (i = 0; i < bsize; i++) {
-			printf("[%d] %llu\n", rank, local_elmnts[i]);
-		}
-	}
-		*/
 	/*
 	 * GLOBAL SAMPLE SELECT GATHER
 	 */
 	MPI_Allgather(local_sample, nbuckets-1, MPI_UNSIGNED_LONG_LONG,
 			sample, nbuckets-1, MPI_UNSIGNED_LONG_LONG,
 			MPI_COMM_WORLD);
-
-	/*
-	for (j = 0; j < nbuckets; j++) {
-		MPI_Barrier(MPI_COMM_WORLD);
-		if (j != rank) continue;
-		printf("[%d] Here are all the samples: ", rank);
-		for (i = 0; i < nbuckets*(nbuckets-1); i++) {
-			printf("%d, ", sample[i]);
-		}
-		printf("and I sent ");
-		for (i = 0; i < nbuckets - 1; i++)
-			printf("%d, ", local_sample[i]);
-		printf("\n");
-	}
-	*/
 
 	MPI_Barrier(MPI_COMM_WORLD);
 	if (!rank) {
@@ -154,17 +124,6 @@ int main(int argc, char *argv[]) {
 
 	MPI_Barrier(MPI_COMM_WORLD);
 	if (!rank) {
-		/*
-		printf("Splitters: ");
-		for (i = 0; i < nbuckets; i++) {
-			printf("%llu, ", splitters[i]);
-		}
-		printf("chosen from this list: ");
-		for (i = 0; i < (nbuckets-1)*nbuckets; i++) {
-			printf("%llu, ", sample[i]);
-		}
-		printf("\n");
-		*/
 		t3 = get_clock();
 		printf("Splitter Select Time: %lf\n",(t3-t2));
 		t2 = t3;
@@ -184,16 +143,6 @@ int main(int argc, char *argv[]) {
 			}
 		}
 	}
-	/*
-	for (j = 0; j < nbuckets; j++) {
-		MPI_Barrier(MPI_COMM_WORLD);
-		if (j != rank) continue;
-		printf("[%d] Pivot: %llu; Bucket Size: %d\n", rank, splitters[rank], bucket_size);
-		for (i = 0; i < bucket_size; i++)
-			printf("%llu, ", bucket[i]);
-		printf("\n");
-	}
-	*/
 
 	MPI_Barrier(MPI_COMM_WORLD);
 	if (!rank) {
@@ -207,17 +156,6 @@ int main(int argc, char *argv[]) {
 	 * LOCAL BUCKET SORT
 	 */
 	qsort(bucket, bucket_size, sizeof (uint64_t), compare);
-
-	/*
-	for (j = 0; j < nbuckets; j++) {
-		MPI_Barrier(MPI_COMM_WORLD);
-		if (j != rank) continue;
-		printf("[%d] (sorted) Pivot: %llu; Bucket Size: %d\n", rank, splitters[rank], bucket_size);
-		for (i = 0; i < bucket_size; i++)
-			printf("%llu, ", bucket[i]);
-		printf("\n");
-	}
-	*/
 
 	MPI_Barrier(MPI_COMM_WORLD);
 	if (!rank) {
@@ -277,7 +215,6 @@ int main(int argc, char *argv[]) {
 
 	free(splitters);
 	free(elmnts);
-	//free(local_elmnts);
 	free(sample);
 	free(local_sample);
 	free(bucket);
