@@ -186,6 +186,16 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	#if PROFILE
+	{
+		MPI_Barrier(MPI_COMM_WORLD);
+		if (!rank) {
+			printf("[-] Local Bucket Distribution Time: %lf\n", ((t3 = get_clock()) - t2));
+			t2 = t3;
+		}
+	}
+	#endif
+
 
 	/*
 	 * GLOBAL BUCKET DISTRIBUTE
@@ -207,7 +217,7 @@ int main(int argc, char *argv[]) {
 	{
 		MPI_Barrier(MPI_COMM_WORLD);
 		if (!rank) {
-			printf("[ ] Bucket Distribution Coordination Time: %lf\n", ((t3 = get_clock()) - t2));
+			printf("[+] Bucket Distribution Coordination Time: %lf\n", ((t3 = get_clock()) - t2));
 			t2 = t3;
 		}
 	}
@@ -224,7 +234,7 @@ int main(int argc, char *argv[]) {
 	{
 		MPI_Barrier(MPI_COMM_WORLD);
 		if (!rank) {
-			printf("[ ] Bucket Distribute Time: %lf\n", ((t3 = get_clock()) - t2));
+			printf("[+] Bucket Distribute Time: %lf\n", ((t3 = get_clock()) - t2));
 			t2 = t3;
 		}
 	}
