@@ -10,7 +10,7 @@
 #define OUTPUT 0
 #define CHECK 1
 #define DEBUG 0
-#define PROFILE 1
+#define PROFILE 0
 #define bool2str(b) ((b)?"true":"false")
 
 typedef unsigned long long uint64_t;
