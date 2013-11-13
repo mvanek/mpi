@@ -196,7 +196,6 @@ int main(int argc, char *argv[]) {
 	}
 	#endif
 
-
 	/*
 	 * GLOBAL BUCKET DISTRIBUTE
 	 */
@@ -277,7 +276,7 @@ int main(int argc, char *argv[]) {
 		local_min_max[0] = bucket[0];
 		local_min_max[1] = bucket[bucket_size-1];
 		MPI_Gather(local_min_max, 2, MPI_UNSIGNED_LONG_LONG,
-				min_max, 2*nbuckets, MPI_UNSIGNED_LONG_LONG,
+				min_max, 2, MPI_UNSIGNED_LONG_LONG,
 				0, MPI_COMM_WORLD);
 		if (!rank) {
 			checkMax = true;
